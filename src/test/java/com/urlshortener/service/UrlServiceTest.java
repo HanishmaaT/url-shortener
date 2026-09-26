@@ -25,6 +25,7 @@ class UrlServiceTest {
     private UrlMappingRepository repository;
     private ShortCodeGenerator generator;
     private UrlValidator validator;
+    private AnalyticsService analyticsService;
     private UrlService urlService;
 
     @BeforeEach
@@ -32,30 +33,30 @@ class UrlServiceTest {
         repository = Mockito.mock(UrlMappingRepository.class);
         generator = Mockito.mock(ShortCodeGenerator.class);
         validator = Mockito.mock(UrlValidator.class);
+        analyticsService = Mockito.mock(AnalyticsService.class);
 
         urlService = new UrlService(
                 repository,
                 generator,
-                validator
+                validator,
+                analyticsService
         );
     }
 
     @Test
     void shouldCreateShortUrlForValidUrl() {
+
         String originalUrl = "https://example.com";
         String shortCode = "Ab12Cd3";
 
-        when(validator.isValid(originalUrl))
-                .thenReturn(true);
+        when(validator.isValid(originalUrl)).thenReturn(true);
+        when(generator.generate()).thenReturn(shortCode);
+        when(repository.existsByShortCode(shortCode)).thenReturn(false);
 
-        when(generator.generate())
-                .thenReturn(shortCode);
-
-        when(repository.existsByShortCode(shortCode))
-                .thenReturn(false);
-
-        UrlMapping mapping =
-                new UrlMapping(shortCode, originalUrl);
+        UrlMapping mapping = new UrlMapping(
+                shortCode,
+                originalUrl
+        );
 
         when(repository.save(any(UrlMapping.class)))
                 .thenReturn(mapping);
@@ -79,6 +80,7 @@ class UrlServiceTest {
 
     @Test
     void shouldRejectInvalidUrl() {
+
         String invalidUrl = "invalid-url";
 
         when(validator.isValid(invalidUrl))
@@ -94,12 +96,15 @@ class UrlServiceTest {
     }
 
     @Test
-    void shouldResolveExistingShortCode() {
-        UrlMapping mapping =
-                new UrlMapping(
-                        "Ab12Cd3",
-                        "https://example.com"
-                );
+    void shouldResolveExistingShortCodeAndRecordAnalytics() {
+
+        UrlMapping mapping = Mockito.mock(UrlMapping.class);
+
+        when(mapping.getId()).thenReturn(1L);
+        when(mapping.getOriginalUrl())
+                .thenReturn("https://example.com");
+        when(mapping.isExpired(any(Instant.class)))
+                .thenReturn(false);
 
         when(repository.findByShortCode("Ab12Cd3"))
                 .thenReturn(Optional.of(mapping));
@@ -111,10 +116,14 @@ class UrlServiceTest {
                 "https://example.com",
                 result.getOriginalUrl()
         );
+
+        verify(analyticsService)
+                .recordRedirect(1L);
     }
 
     @Test
     void shouldThrowExceptionForUnknownShortCode() {
+
         when(repository.findByShortCode("Unknown"))
                 .thenReturn(Optional.empty());
 
@@ -122,10 +131,14 @@ class UrlServiceTest {
                 ShortUrlNotFoundException.class,
                 () -> urlService.resolve("Unknown")
         );
+
+        verify(analyticsService, never())
+                .recordRedirect(any());
     }
 
     @Test
     void shouldCreateUrlWithFutureExpiration() {
+
         String originalUrl = "https://example.com";
         String shortCode = "Ab12Cd3";
 
@@ -141,12 +154,11 @@ class UrlServiceTest {
         when(repository.existsByShortCode(shortCode))
                 .thenReturn(false);
 
-        UrlMapping mapping =
-                new UrlMapping(
-                        shortCode,
-                        originalUrl,
-                        expiresAt
-                );
+        UrlMapping mapping = new UrlMapping(
+                shortCode,
+                originalUrl,
+                expiresAt
+        );
 
         when(repository.save(any(UrlMapping.class)))
                 .thenReturn(mapping);
@@ -165,6 +177,7 @@ class UrlServiceTest {
 
     @Test
     void shouldRejectPastExpiration() {
+
         String originalUrl = "https://example.com";
 
         Instant expiresAt =
@@ -186,22 +199,45 @@ class UrlServiceTest {
     }
 
     @Test
-    void shouldRejectExpiredUrlDuringResolve() {
-        String shortCode = "Ab12Cd3";
+    void shouldRejectExpiredUrlDuringResolveWithoutRecordingAnalytics() {
 
-        UrlMapping mapping =
-                new UrlMapping(
-                        shortCode,
-                        "https://example.com",
-                        Instant.now().minusSeconds(60)
-                );
+        UrlMapping mapping = Mockito.mock(UrlMapping.class);
 
-        when(repository.findByShortCode(shortCode))
+        when(mapping.isExpired(any(Instant.class)))
+                .thenReturn(true);
+
+        when(repository.findByShortCode("Ab12Cd3"))
                 .thenReturn(Optional.of(mapping));
 
         assertThrows(
                 ExpiredUrlException.class,
-                () -> urlService.resolve(shortCode)
+                () -> urlService.resolve("Ab12Cd3")
         );
+
+        verify(analyticsService, never())
+                .recordRedirect(any());
+    }
+
+    @Test
+    void shouldGetStatsWithoutRecordingRedirect() {
+
+        UrlMapping mapping = new UrlMapping(
+                "Ab12Cd3",
+                "https://example.com"
+        );
+
+        when(repository.findByShortCode("Ab12Cd3"))
+                .thenReturn(Optional.of(mapping));
+
+        UrlMapping result =
+                urlService.getStats("Ab12Cd3");
+
+        assertEquals(
+                "Ab12Cd3",
+                result.getShortCode()
+        );
+
+        verify(analyticsService, never())
+                .recordRedirect(any());
     }
 }

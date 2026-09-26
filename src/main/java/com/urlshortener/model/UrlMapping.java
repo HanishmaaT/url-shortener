@@ -30,6 +30,9 @@ public class UrlMapping {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    @Column(name = "click_count", nullable = false)
+    private long clickCount = 0;
+
     protected UrlMapping() {
         // Required by JPA
     }
@@ -73,6 +76,10 @@ public class UrlMapping {
 
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    public long getClickCount() {
+        return clickCount;
     }
 
     public boolean isExpired(Instant now) {

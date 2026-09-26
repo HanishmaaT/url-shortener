@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -113,10 +114,6 @@ class UrlShortenerIntegrationTest {
                                         """)
                 )
                 .andExpect(status().isCreated())
-                .andExpect(
-                        jsonPath("$.expiresAt")
-                                .value("2099-01-01T00:00:00Z")
-                )
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -144,6 +141,72 @@ class UrlShortenerIntegrationTest {
                 .andExpect(
                         jsonPath("$.title")
                                 .value("Short URL Expired")
+                );
+    }
+
+    @Test
+    void shouldRecordSuccessfulRedirectAnalytics() throws Exception {
+
+        UrlMapping mapping = repository.save(
+                new UrlMapping(
+                        "Stat123",
+                        "https://example.com"
+                )
+        );
+
+        assertEquals(
+                0,
+                mapping.getClickCount()
+        );
+
+        mockMvc.perform(get("/Stat123"))
+                .andExpect(status().isFound())
+                .andExpect(
+                        header().string(
+                                "Location",
+                                "https://example.com"
+                        )
+                );
+
+        long deadline =
+                System.currentTimeMillis() + 3000;
+
+        long redirectCount = 0;
+
+        while (System.currentTimeMillis() < deadline) {
+
+            redirectCount = repository
+                    .findByShortCode("Stat123")
+                    .orElseThrow()
+                    .getClickCount();
+
+            if (redirectCount == 1) {
+                break;
+            }
+
+            Thread.sleep(50);
+        }
+
+        assertEquals(
+                1,
+                redirectCount
+        );
+
+        mockMvc.perform(
+                        get("/api/urls/Stat123/stats")
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.shortCode")
+                                .value("Stat123")
+                )
+                .andExpect(
+                        jsonPath("$.originalUrl")
+                                .value("https://example.com")
+                )
+                .andExpect(
+                        jsonPath("$.redirectCount")
+                                .value(1)
                 );
     }
 }

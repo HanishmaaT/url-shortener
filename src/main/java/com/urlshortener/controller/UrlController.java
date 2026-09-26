@@ -2,14 +2,17 @@ package com.urlshortener.controller;
 
 import com.urlshortener.dto.CreateUrlRequest;
 import com.urlshortener.dto.CreateUrlResponse;
+import com.urlshortener.dto.UrlStatsResponse;
 import com.urlshortener.model.UrlMapping;
 import com.urlshortener.service.UrlService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -24,30 +27,42 @@ public class UrlController {
     }
 
     @PostMapping
-    public ResponseEntity<CreateUrlResponse> create(
+    @ResponseStatus(HttpStatus.CREATED)
+    public CreateUrlResponse create(
             @Valid @RequestBody CreateUrlRequest request) {
 
         UrlMapping mapping = urlService.createShortUrl(
-        request.url(),
-        request.expiresAt()
+                request.url(),
+                request.expiresAt()
         );
 
         String shortUrl = ServletUriComponentsBuilder
                 .fromCurrentContextPath()
-                .path("/{shortCode}")
-                .buildAndExpand(mapping.getShortCode())
+                .path("/")
+                .path(mapping.getShortCode())
                 .toUriString();
 
-        CreateUrlResponse response = new CreateUrlResponse(
+        return new CreateUrlResponse(
                 mapping.getShortCode(),
                 shortUrl,
                 mapping.getOriginalUrl(),
                 mapping.getCreatedAt(),
                 mapping.getExpiresAt()
         );
+    }
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
+    @GetMapping("/{shortCode}/stats")
+    public UrlStatsResponse getStats(
+            @PathVariable String shortCode) {
+
+        UrlMapping mapping = urlService.getStats(shortCode);
+
+        return new UrlStatsResponse(
+                mapping.getShortCode(),
+                mapping.getOriginalUrl(),
+                mapping.getClickCount(),
+                mapping.getCreatedAt(),
+                mapping.getExpiresAt()
+        );
     }
 }
