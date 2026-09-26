@@ -3,8 +3,11 @@ package com.urlshortener.controller;
 import com.urlshortener.dto.CreateUrlRequest;
 import com.urlshortener.dto.CreateUrlResponse;
 import com.urlshortener.dto.UrlStatsResponse;
+import com.urlshortener.exception.RateLimitExceededException;
 import com.urlshortener.model.UrlMapping;
+import com.urlshortener.service.RateLimitService;
 import com.urlshortener.service.UrlService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,15 +24,27 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class UrlController {
 
     private final UrlService urlService;
+    private final RateLimitService rateLimitService;
 
-    public UrlController(UrlService urlService) {
+    public UrlController(
+            UrlService urlService,
+            RateLimitService rateLimitService) {
+
         this.urlService = urlService;
+        this.rateLimitService = rateLimitService;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CreateUrlResponse create(
-            @Valid @RequestBody CreateUrlRequest request) {
+            @Valid @RequestBody CreateUrlRequest request,
+            HttpServletRequest httpRequest) {
+
+        String clientId = httpRequest.getRemoteAddr();
+
+        if (!rateLimitService.allowRequest(clientId)) {
+            throw new RateLimitExceededException();
+        }
 
         UrlMapping mapping = urlService.createShortUrl(
                 request.url(),
@@ -55,7 +70,8 @@ public class UrlController {
     public UrlStatsResponse getStats(
             @PathVariable String shortCode) {
 
-        UrlMapping mapping = urlService.getStats(shortCode);
+        UrlMapping mapping =
+                urlService.getStats(shortCode);
 
         return new UrlStatsResponse(
                 mapping.getShortCode(),
