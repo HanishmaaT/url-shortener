@@ -27,7 +27,10 @@ public class UrlController {
     public ResponseEntity<CreateUrlResponse> create(
             @Valid @RequestBody CreateUrlRequest request) {
 
-        UrlMapping mapping = urlService.createShortUrl(request.url());
+        UrlMapping mapping = urlService.createShortUrl(
+        request.url(),
+        request.expiresAt()
+        );
 
         String shortUrl = ServletUriComponentsBuilder
                 .fromCurrentContextPath()
@@ -39,7 +42,8 @@ public class UrlController {
                 mapping.getShortCode(),
                 shortUrl,
                 mapping.getOriginalUrl(),
-                mapping.getCreatedAt()
+                mapping.getCreatedAt(),
+                mapping.getExpiresAt()
         );
 
         return ResponseEntity

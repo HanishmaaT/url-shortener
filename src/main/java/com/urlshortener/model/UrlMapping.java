@@ -27,13 +27,25 @@ public class UrlMapping {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     protected UrlMapping() {
         // Required by JPA
     }
 
-    public UrlMapping(String shortCode, String originalUrl) {
+    public UrlMapping(
+            String shortCode,
+            String originalUrl,
+            Instant expiresAt) {
+
         this.shortCode = shortCode;
         this.originalUrl = originalUrl;
+        this.expiresAt = expiresAt;
+    }
+
+    public UrlMapping(String shortCode, String originalUrl) {
+        this(shortCode, originalUrl, null);
     }
 
     @PrePersist
@@ -57,5 +69,13 @@ public class UrlMapping {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public boolean isExpired(Instant now) {
+        return expiresAt != null && !expiresAt.isAfter(now);
     }
 }

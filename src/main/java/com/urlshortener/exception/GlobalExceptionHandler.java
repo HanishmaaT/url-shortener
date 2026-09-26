@@ -11,21 +11,39 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidUrlException.class)
     public ProblemDetail handleInvalidUrl(InvalidUrlException exception) {
+
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST,
                 exception.getMessage()
         );
+
         problem.setTitle("Invalid URL");
         return problem;
     }
 
     @ExceptionHandler(ShortUrlNotFoundException.class)
-    public ProblemDetail handleNotFound(ShortUrlNotFoundException exception) {
+    public ProblemDetail handleNotFound(
+            ShortUrlNotFoundException exception) {
+
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.NOT_FOUND,
                 exception.getMessage()
         );
+
         problem.setTitle("Short URL Not Found");
+        return problem;
+    }
+
+    @ExceptionHandler(ExpiredUrlException.class)
+    public ProblemDetail handleExpiredUrl(
+            ExpiredUrlException exception) {
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.GONE,
+                exception.getMessage()
+        );
+
+        problem.setTitle("Short URL Expired");
         return problem;
     }
 
@@ -37,6 +55,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 exception.getMessage()
         );
+
         problem.setTitle("Short Code Generation Failed");
         return problem;
     }
@@ -56,6 +75,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 message
         );
+
         problem.setTitle("Validation Failed");
         return problem;
     }
