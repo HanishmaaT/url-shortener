@@ -1,4 +1,4 @@
-\# URL Shortener - Requirement Analysis
+\# URL Shortener - Requirements
 
 
 
@@ -6,35 +6,41 @@
 
 
 
-Build a reliable URL shortener service that converts long URLs into
+Build a reliable URL shortening service that converts long HTTP/HTTPS URLs
 
-short, shareable URLs and redirects users back to the original URL.
-
-
-
-The solution should demonstrate:
+into short URLs and redirects users to the original destination.
 
 
 
-\- Clean and maintainable API design
+The prototype must be easy to run locally while demonstrating engineering
 
-\- Durable URL persistence
+practices that can evolve toward a production deployment.
 
-\- Redirect handling
+
+
+The system demonstrates:
+
+
+
+\- URL creation and redirection
+
+\- Input validation and error handling
 
 \- Optional URL expiration
 
-\- Basic analytics
+\- Redirect analytics
 
-\- Reliability and error handling
+\- Asynchronous analytics processing
 
-\- Caching for frequently accessed URLs
+\- Rate limiting
 
-\- Basic abuse protection
+\- Durable database support
 
 \- Automated testing
 
-\- AI-assisted engineering with human review and validation
+\- Horizontal scaling considerations
+
+\- AI-assisted engineering with human validation
 
 
 
@@ -50,79 +56,47 @@ The solution should demonstrate:
 
 
 
-The system shall accept a valid HTTP or HTTPS URL and generate a
-
-unique short code.
+The system shall expose an API to create a shortened URL.
 
 
 
-Example:
+Requirements:
 
 
 
-Input:
+\- Accept HTTP and HTTPS URLs.
+
+\- Reject malformed or unsupported URLs.
+
+\- Generate a unique short code.
+
+\- Persist the mapping.
+
+\- Prevent short-code collisions.
+
+\- Return the generated short URL.
 
 
 
-https://example.com/products/123
+\### FR-2: Redirect
 
 
 
-Output:
+The system shall redirect a valid short code to its original URL.
 
 
 
-http://localhost:8080/aB3x9K
+Requirements:
 
 
 
-Acceptance Criteria:
-
-
-
-\- HTTP and HTTPS URLs are accepted.
-
-\- Invalid or unsupported URLs are rejected.
-
-\- Every stored URL has a unique short code.
-
-\- The URL mapping is persisted in PostgreSQL.
-
-\- Short-code collisions must not overwrite an existing mapping.
-
-
-
-\---
-
-
-
-\### FR-2: Redirect Short URL
-
-
-
-When a user accesses a valid short URL, the system shall redirect
-
-the user to the corresponding original URL.
-
-
-
-Acceptance Criteria:
-
-
-
-\- Existing and active short codes redirect to the original URL.
+\- Existing active short codes return an HTTP redirect.
 
 \- Unknown short codes return HTTP 404.
 
-\- Expired short URLs do not redirect.
+\- Expired short codes return HTTP 410.
 
-\- Frequently accessed mappings may be served from Redis cache.
-
-\- PostgreSQL remains the source of truth.
-
-
-
-\---
+\- Redirect processing should remain lightweight.
 
 
 
@@ -130,27 +104,21 @@ Acceptance Criteria:
 
 
 
-A shortened URL may optionally have an expiration time.
+A URL may optionally contain an expiration time.
 
 
 
-Acceptance Criteria:
+Requirements:
 
 
 
-\- Expiration is optional.
+\- URLs without expiration remain active.
 
-\- A URL without expiration remains active.
+\- URLs with a future expiration remain active until that time.
 
-\- An expired URL returns HTTP 410 Gone.
+\- Expired URLs must not redirect.
 
-\- Expired URLs must not be treated as successful redirects.
-
-\- Expired redirects must not increment analytics.
-
-
-
-\---
+\- Expired redirects must not contribute to successful redirect analytics.
 
 
 
@@ -158,55 +126,49 @@ Acceptance Criteria:
 
 
 
-The system shall track the total number of successful redirects
+The system shall maintain the total number of successful redirects for each
 
-for each shortened URL.
-
-
-
-Acceptance Criteria:
+short URL.
 
 
 
-\- Each successful redirect increments the click count.
-
-\- Failed redirect attempts do not increment the count.
-
-\- Expired redirect attempts do not increment the count.
-
-\- Analytics can be retrieved for a short code.
+Requirements:
 
 
 
-\---
+\- Only successful redirects are counted.
+
+\- Unknown URLs are not counted.
+
+\- Expired URLs are not counted.
+
+\- Analytics shall be retrievable through an API.
+
+\- Analytics updates should not unnecessarily delay the redirect response.
 
 
 
-\### FR-5: Caching
+\### FR-5: Rate Limiting
 
 
 
-Frequently accessed URL mappings should be cached using Redis to
+The application shall protect selected public endpoints from excessive request
 
-reduce repeated database reads.
-
-
-
-Acceptance Criteria:
+rates.
 
 
 
-\- The application checks Redis before querying PostgreSQL during
+Requirements:
 
-&#x20; redirect lookup.
 
-\- On a cache miss, the mapping is retrieved from PostgreSQL.
 
-\- Retrieved mappings may then be stored in Redis.
+\- Requests within the configured limit are processed normally.
 
-\- PostgreSQL remains the authoritative source of data.
+\- Requests exceeding the configured limit return HTTP 429.
 
-\- Correctness must not depend on Redis being permanent storage.
+\- The prototype may use application-local rate limiting.
+
+\- Distributed rate limiting is documented as a production scaling concern.
 
 
 
@@ -214,57 +176,53 @@ Acceptance Criteria:
 
 
 
-\### FR-6: Rate Limiting
+\## 3. Persistence Strategy
 
 
 
-The application should provide basic protection against excessive
-
-requests to public endpoints.
+\### Default Profile
 
 
 
-Acceptance Criteria:
+H2 is the default database.
 
 
 
-\- Excessive requests are rejected with an appropriate HTTP response.
-
-\- Normal application usage is not affected.
-
-\- The implementation remains simple enough for the prototype.
-
-\- Limitations of local rate limiting are documented.
+Reasons:
 
 
 
-\---
+\- Zero external infrastructure required.
+
+\- Reviewer can clone and run the application immediately.
+
+\- Suitable for automated tests and prototype evaluation.
 
 
 
-\## 3. Reliability and Validation
+\### PostgreSQL Profile
 
 
 
-The service shall handle expected failures consistently.
+PostgreSQL is supported as an optional production-oriented profile.
 
 
 
-\- Invalid URL -> HTTP 400 Bad Request
+Reasons:
 
-\- Unknown short code -> HTTP 404 Not Found
 
-\- Expired short code -> HTTP 410 Gone
 
-\- Excessive requests -> HTTP 429 Too Many Requests
+\- Durable persistence.
 
-\- Unexpected server failure -> HTTP 500 Internal Server Error
+\- Suitable for shared persistence across multiple application instances.
 
-\- Short-code collisions must not overwrite existing mappings.
+\- PostgreSQL compatibility is validated separately from the zero-setup profile.
 
-\- Cache failures should not make Redis the source of truth.
 
-\- API responses should not expose internal stack traces.
+
+The application uses Spring Data JPA so business logic remains independent of
+
+the selected database profile.
 
 
 
@@ -272,21 +230,41 @@ The service shall handle expected failures consistently.
 
 
 
-\## 4. Data Requirements
+\## 4. Reliability Requirements
 
 
 
-Each shortened URL should contain sufficient information to support
-
-the required functionality.
+The implementation should:
 
 
 
-The persisted URL mapping includes:
+\- Enforce uniqueness of short codes.
+
+\- Handle generated-code collisions safely.
+
+\- Return consistent HTTP error responses.
+
+\- Avoid exposing internal exceptions to API consumers.
+
+\- Keep the redirect path lightweight.
+
+\- Prevent analytics failures from breaking successful redirects where practical.
 
 
 
-\- Unique identifier
+\---
+
+
+
+\## 5. Data Requirements
+
+
+
+A URL mapping may contain:
+
+
+
+\- Internal identifier
 
 \- Short code
 
@@ -300,9 +278,7 @@ The persisted URL mapping includes:
 
 
 
-The short code must have a unique database constraint/index because
-
-it is the primary lookup value during redirects.
+The short code must have a uniqueness constraint/index.
 
 
 
@@ -310,71 +286,43 @@ it is the primary lookup value during redirects.
 
 
 
-\## 5. Assumptions
+\## 6. Scaling Requirements
 
 
 
-\- Only HTTP and HTTPS destination URLs are supported.
-
-\- Authentication and authorization are outside the scope of this
-
-&#x20; prototype.
-
-\- Analytics means total successful redirect count for the prototype.
-
-\- PostgreSQL is used as the primary persistent database.
-
-\- H2 may be used for lightweight automated tests.
-
-\- Redis is used as a cache optimization.
-
-\- PostgreSQL remains the source of truth.
-
-\- The service is implemented as a modular monolith.
-
-\- Docker Compose may be used to provide local PostgreSQL and Redis
-
-&#x20; infrastructure.
+The application should be designed so that the API layer can remain stateless.
 
 
 
-\---
+A production deployment could horizontally scale multiple application
+
+instances behind a load balancer using shared PostgreSQL persistence.
 
 
 
-\## 6. Out of Scope
+Prototype-local mechanisms such as in-memory rate limiting and in-process
+
+asynchronous analytics would require distributed replacements at larger scale.
 
 
 
-The prototype does not implement:
+Potential production evolutions include:
 
 
 
-\- User accounts
+\- Redis for distributed caching and rate limiting
 
-\- Authentication and authorization
+\- Kafka or another durable event broker for high-volume analytics
 
-\- Geographic analytics
+\- Multiple stateless application instances
 
-\- Device or browser analytics
+\- Managed PostgreSQL
 
-\- Malicious URL reputation checking
-
-\- Kafka or another message broker
-
-\- Database replication
-
-\- Kubernetes deployment
-
-\- Multi-region deployment
-
-\- Full distributed observability infrastructure
+\- Centralized observability
 
 
 
-These can be considered future production enhancements when justified
-
-by scale or business requirements.
+These are architectural evolution paths, not requirements for this prototype.
 
 
 
@@ -382,19 +330,19 @@ by scale or business requirements.
 
 
 
-\## 7. Engineering Scenarios
+\## 7. Scenario 1 - Greenfield Development
 
 
 
-\### Scenario 1: Greenfield Development
+Initial requirement:
 
 
 
-Build the initial URL-shortening service from scratch.
+> Build a URL shortening service.
 
 
 
-Initial scope:
+Scope:
 
 
 
@@ -402,63 +350,31 @@ Initial scope:
 
 \- Short-code generation
 
-\- PostgreSQL persistence
+\- Persistence
 
-\- Short URL creation
+\- Create API
 
-\- Redirect functionality
+\- Redirect API
 
-\- Consistent error handling
+\- Error handling
 
 \- Automated tests
 
 
 
-The greenfield implementation should be validated before introducing
-
-later enhancements.
+Acceptance criteria:
 
 
 
-\---
+\- A valid URL can be shortened.
 
+\- The generated short code is persisted.
 
+\- Visiting the short URL redirects to the original URL.
 
-\### Scenario 2: Brownfield Enhancement
+\- Invalid URLs are rejected.
 
-
-
-After the core application is working, enhance the existing system
-
-with optional URL expiration.
-
-
-
-Before implementation:
-
-
-
-\- Identify affected components.
-
-\- Identify persistence changes.
-
-\- Identify redirect-flow changes.
-
-\- Identify regression risks.
-
-\- Define additional acceptance criteria.
-
-
-
-Then implement expiration and validate that existing URL creation and
-
-redirect behavior continues to work.
-
-
-
-Caching and additional reliability improvements can also be introduced
-
-incrementally after the core behavior is stable.
+\- Unknown short codes return 404.
 
 
 
@@ -466,7 +382,59 @@ incrementally after the core behavior is stable.
 
 
 
-\### Scenario 3: Ambiguous Requirement
+\## 8. Scenario 2 - Brownfield Enhancement
+
+
+
+Change request:
+
+
+
+> Existing short URLs should optionally expire.
+
+
+
+Before implementation, impacted components must be identified.
+
+
+
+Expected impact:
+
+
+
+\- Persistence model
+
+\- Create request
+
+\- Service logic
+
+\- Redirect behavior
+
+\- Error handling
+
+\- Regression tests
+
+
+
+Acceptance criteria:
+
+
+
+\- Existing URLs without expiration continue to work.
+
+\- Future expiration timestamps are supported.
+
+\- Expired URLs return HTTP 410.
+
+\- Existing URL-shortening behavior is not broken.
+
+
+
+\---
+
+
+
+\## 9. Scenario 3 - Ambiguous Requirement
 
 
 
@@ -474,13 +442,13 @@ Original requirement:
 
 
 
-"Add analytics."
+> Add analytics.
 
 
 
-This requirement is ambiguous because it does not specify which
+The requirement is ambiguous because "analytics" could include clicks,
 
-analytics are required.
+geography, devices, referrers, time-series data, or other metrics.
 
 
 
@@ -488,29 +456,25 @@ For this prototype, the requirement is normalized to:
 
 
 
-"Track the total number of successful redirects for each shortened
+> Track the total number of successful redirects for each short URL and expose
 
-URL and expose that count through an API."
-
-
-
-Assumptions:
+> the value through a statistics API.
 
 
 
-\- Only successful redirects count as clicks.
+Acceptance criteria:
 
-\- Unknown short codes do not increment analytics.
+
+
+\- Successful redirects increment the count.
+
+\- Unknown URLs do not increment analytics.
 
 \- Expired URLs do not increment analytics.
 
-\- Geographic, device, browser, and time-series analytics are outside
+\- Statistics can be retrieved for a short code.
 
-&#x20; the current scope.
-
-
-
-More detailed analytics would require additional product requirements.
+\- Analytics processing is separated from the primary redirect response path.
 
 
 
@@ -518,109 +482,41 @@ More detailed analytics would require additional product requirements.
 
 
 
-\## 8. Task Decomposition
+\## 10. Validation Strategy
 
 
 
-1\. Initialize and verify the Spring Boot project.
-
-2\. Document requirements and architecture decisions.
-
-3\. Configure PostgreSQL persistence.
-
-4\. Define the initial URL persistence model.
-
-5\. Implement URL validation.
-
-6\. Implement unique short-code generation.
-
-7\. Implement short-URL creation.
-
-8\. Implement redirect functionality.
-
-9\. Add consistent API error handling.
-
-10\. Add unit and integration tests for the greenfield implementation.
-
-11\. Validate the greenfield implementation.
-
-12\. Analyze the existing codebase for expiration impact.
-
-13\. Implement optional URL expiration.
-
-14\. Add expiration regression tests.
-
-15\. Clarify and normalize the analytics requirement.
-
-16\. Implement successful redirect-count analytics.
-
-17\. Add analytics tests.
-
-18\. Introduce Redis caching for redirect lookups.
-
-19\. Validate database fallback behavior.
-
-20\. Add basic rate limiting.
-
-21\. Review security and failure scenarios.
-
-22\. Add Docker Compose for local infrastructure.
-
-23\. Run automated quality gates.
-
-24\. Perform end-to-end API validation.
-
-25\. Document AI-assisted engineering decisions.
-
-26\. Document trade-offs, limitations, and future improvements.
-
-27\. Perform final engineer review and sign-off.
+Changes will be validated using:
 
 
 
-\---
+\- Unit tests
 
+\- Integration tests
 
+\- API behavior tests
 
-\## 9. Validation Strategy
-
-
-
-The implementation will be validated through:
-
-
-
-\- Unit tests for business logic
-
-\- Integration tests for API behavior
-
-\- Database persistence tests
-
-\- Positive and negative URL validation tests
-
-\- Unknown short-code tests
-
-\- Expiration tests
-
-\- Analytics tests
-
-\- Cache hit and cache miss behavior
-
-\- Rate-limit behavior
+\- Maven build verification
 
 \- Regression testing after brownfield changes
 
-\- Maven build and test execution
-
-\- Manual end-to-end API verification
+\- Manual API verification where useful
 
 
 
-A change is not considered complete solely because AI generated code
+The final validation command is:
 
-successfully. Generated or modified code must be reviewed and validated
 
-before acceptance.
+
+&#x20;   ./mvnw clean verify
+
+
+
+On Windows:
+
+
+
+&#x20;   mvnw.cmd clean verify
 
 
 
@@ -628,11 +524,11 @@ before acceptance.
 
 
 
-\## 10. Engineering Ownership
+\## 11. Engineering Ownership
 
 
 
-AI tools may assist with:
+AI may assist with:
 
 
 
@@ -642,41 +538,33 @@ AI tools may assist with:
 
 \- Implementation suggestions
 
-\- Debugging
-
-\- Refactoring
-
 \- Test generation
+
+\- Debugging
 
 \- Documentation
 
-\- Security and reliability review
+\- Review
 
 
 
-AI-generated output will be reviewed before acceptance.
+AI-generated suggestions are reviewed before acceptance.
 
 
 
-Important suggestions may be:
+The engineer remains responsible for:
 
 
 
-\- Accepted
+\- Architecture decisions
 
-\- Modified
+\- Correctness
 
-\- Rejected
+\- Security
 
+\- Testing
 
+\- Maintainability
 
-The reasoning for significant decisions will be documented where
-
-appropriate.
-
-
-
-The engineer remains responsible for correctness, maintainability,
-
-security, testing, architecture decisions, and final approval.
+\- Production-readiness assessment
 

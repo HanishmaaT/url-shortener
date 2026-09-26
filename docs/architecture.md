@@ -1,24 +1,56 @@
-\# URL Shortener - Architecture Overview
+\# URL Shortener - Architecture
 
 
 
-\## 1. Architecture Goal
+\## 1. Architecture Overview
 
 
 
-The goal is to build a reliable, maintainable, testable, and scalable
-
-URL shortener while keeping the system understandable and easy to run.
+The URL shortener is implemented as a layered Spring Boot modular monolith.
 
 
 
-The application uses a layered modular-monolith architecture.
+The architecture intentionally avoids unnecessary distributed-system
+
+complexity while keeping clear boundaries that support future evolution.
 
 
 
-The design intentionally introduces infrastructure only where there is
+Client
 
-a clear engineering reason for it.
+&#x20; |
+
+&#x20; v
+
+Rate Limiting
+
+&#x20; |
+
+&#x20; v
+
+REST Controllers
+
+&#x20; |
+
+&#x20; v
+
+Service Layer
+
+&#x20; |
+
+&#x20; +--------------------+
+
+&#x20; |                    |
+
+&#x20; v                    v
+
+JPA Repository     Async Analytics
+
+&#x20; |
+
+&#x20; v
+
+Database
 
 
 
@@ -26,61 +58,39 @@ a clear engineering reason for it.
 
 
 
-\## 2. High-Level Architecture
+\## 2. Technology Stack
 
 
 
-&#x20;                   Client
+\- Java 21
 
-&#x20;                     |
+\- Spring Boot
 
-&#x20;                     | HTTP
+\- Spring Web MVC
 
-&#x20;                     v
+\- Spring Data JPA
 
-&#x20;             Spring Boot API
+\- Jakarta Validation
 
-&#x20;                     |
+\- H2
 
-&#x20;         +-----------+-----------+
+\- PostgreSQL
 
-&#x20;         |                       |
+\- Maven
 
-&#x20;         v                       v
+\- JUnit 5
 
-&#x20;  URL Controller         Redirect Controller
+\- Mockito
 
-&#x20;         |                       |
+\- Git / GitHub
 
-&#x20;         +-----------+-----------+
 
-&#x20;                     |
 
-&#x20;                     v
+\---
 
-&#x20;                Service Layer
 
-&#x20;                     |
 
-&#x20;            +--------+--------+
-
-&#x20;            |                 |
-
-&#x20;            v                 v
-
-&#x20;         Redis            PostgreSQL
-
-&#x20;         Cache             Database
-
-&#x20;            |                 |
-
-&#x20;            +--------+--------+
-
-&#x20;                     |
-
-&#x20;                     v
-
-&#x20;                 Analytics
+\## 3. Application Layers
 
 
 
@@ -92,17 +102,13 @@ Responsible for:
 
 
 
-\- Receiving HTTP requests
+\- HTTP request/response handling
 
 \- Request validation
 
-\- Returning appropriate HTTP responses
+\- HTTP status codes
 
-\- Redirecting short URLs to original URLs
-
-
-
-Business logic is kept outside controllers.
+\- Redirect responses
 
 
 
@@ -114,19 +120,15 @@ Responsible for:
 
 
 
-\- URL shortening logic
+\- URL creation
 
-\- Generating unique short codes
+\- Short-code generation coordination
 
-\- URL expiration checks
+\- Expiration rules
 
-\- Redirect processing
+\- Redirect resolution
 
-\- Cache interaction
-
-\- Click analytics
-
-\- Business validation
+\- Analytics coordination
 
 
 
@@ -138,91 +140,23 @@ Responsible for:
 
 
 
-\- Persisting URL mappings
+\- Persistence
 
-\- Looking up URLs by short code
+\- Short-code lookup
 
-\- Checking short-code uniqueness
+\- Uniqueness checks
 
-\- Updating URL information
-
-
-
-Spring Data JPA is used to separate persistence concerns from
-
-business logic.
+\- Analytics persistence operations
 
 
 
-\---
+\### Validation Layer
 
 
 
-\## 3. Persistence Strategy
+Responsible for validating user-provided URLs and rejecting unsupported or
 
-
-
-\### PostgreSQL
-
-
-
-PostgreSQL is used as the primary persistent database.
-
-
-
-It stores:
-
-
-
-\- Original URL
-
-\- Short code
-
-\- Creation timestamp
-
-\- Optional expiration timestamp
-
-\- Click count
-
-
-
-PostgreSQL was selected instead of relying only on an in-memory
-
-database because URL mappings must survive application restarts in
-
-a realistic deployment.
-
-
-
-\### H2
-
-
-
-H2 may be used in automated tests where an isolated lightweight
-
-database improves test execution.
-
-
-
-\### Database Indexing
-
-
-
-The short code is used for almost every redirect lookup.
-
-
-
-A unique index/constraint will therefore be maintained on the short
-
-code to:
-
-
-
-\- Enforce uniqueness
-
-\- Prevent duplicate mappings
-
-\- Improve redirect lookup performance
+malformed values.
 
 
 
@@ -230,71 +164,47 @@ code to:
 
 
 
-\## 4. Caching Strategy
+\## 4. Persistence Architecture
 
 
 
-Redis is used to cache frequently accessed URL mappings.
+The default application profile uses an in-memory H2 database.
 
 
 
-URL-shortening systems are typically read-heavy: a URL may be created
-
-once but redirected many times.
+This provides a zero-setup evaluator experience:
 
 
 
-Redirect lookup flow:
+&#x20;   clone -> build -> run
 
 
 
-Request
+An optional PostgreSQL profile provides a production-oriented persistence
 
-&#x20; |
-
-&#x20; v
-
-Check Redis
-
-&#x20; |
-
-&#x20; +---- Cache Hit ----> Use cached mapping
-
-&#x20; |
-
-&#x20; +---- Cache Miss
-
-&#x20;            |
-
-&#x20;            v
-
-&#x20;       PostgreSQL
-
-&#x20;            |
-
-&#x20;            v
-
-&#x20;       Store in Redis
-
-&#x20;            |
-
-&#x20;            v
-
-&#x20;         Redirect
+configuration.
 
 
 
-This reduces repeated database reads for frequently accessed short
+Application
 
-URLs.
+&#x20;   |
+
+Spring Data JPA
+
+&#x20;   |
+
+&#x20;   +---- H2 (default)
+
+&#x20;   |
+
+&#x20;   +---- PostgreSQL (optional profile)
 
 
 
-PostgreSQL remains the source of truth.
+PostgreSQL was selected as the production-oriented database because URL
 
-
-
-The application must not rely on Redis as permanent storage.
+mappings require durable shared persistence and indexed lookup by short code.
 
 
 
@@ -302,107 +212,25 @@ The application must not rely on Redis as permanent storage.
 
 
 
-\## 5. Main Request Flows
+\## 5. Short-Code Strategy
 
 
 
-\### Create Short URL
+Short codes are generated using a Base62-style character set.
 
 
 
-Client
-
-&#x20; |
-
-&#x20; | POST /api/urls
-
-&#x20; v
-
-Controller
-
-&#x20; |
-
-&#x20; | Validate request
-
-&#x20; v
-
-Service
-
-&#x20; |
-
-&#x20; | Generate short code
-
-&#x20; | Check uniqueness
-
-&#x20; v
-
-Repository
-
-&#x20; |
-
-&#x20; v
-
-PostgreSQL
-
-&#x20; |
-
-&#x20; v
-
-Return created short URL
+The database also enforces uniqueness.
 
 
 
-\### Redirect Short URL
+Collision handling is performed by retrying generation rather than overwriting
+
+an existing mapping.
 
 
 
-Client
-
-&#x20; |
-
-&#x20; | GET /{shortCode}
-
-&#x20; v
-
-Redirect Controller
-
-&#x20; |
-
-&#x20; v
-
-Service
-
-&#x20; |
-
-&#x20; v
-
-Check Redis
-
-&#x20; |
-
-&#x20; +---- Hit -------------------+
-
-&#x20; |                            |
-
-&#x20; +---- Miss --> PostgreSQL ---+
-
-&#x20;                              |
-
-&#x20;                              v
-
-&#x20;                    Check expiration
-
-&#x20;                              |
-
-&#x20;                              v
-
-&#x20;                   Update click analytics
-
-&#x20;                              |
-
-&#x20;                              v
-
-&#x20;                   Redirect to original URL
+This provides defense at both the application and persistence layers.
 
 
 
@@ -410,101 +238,49 @@ Check Redis
 
 
 
-\## 6. Technology Decisions
+\## 6. Redirect Flow
 
 
 
-\### Java 21
+GET /{shortCode}
 
+&#x20;      |
 
+&#x20;      v
 
-Java 21 is an LTS release and is available in the development
+Resolve mapping
 
-environment.
+&#x20;      |
 
+&#x20;      +---- not found ----> HTTP 404
 
+&#x20;      |
 
-\### Spring Boot
+&#x20;      v
 
+Check expiration
 
+&#x20;      |
 
-Spring Boot provides:
+&#x20;      +---- expired ------> HTTP 410
 
+&#x20;      |
 
+&#x20;      v
 
-\- REST API support
+Trigger analytics update
 
-\- Dependency injection
+&#x20;      |
 
-\- Request validation
+&#x20;      v
 
-\- Exception handling
+HTTP redirect
 
-\- Database integration
 
-\- Caching integration
 
-\- Testing support
+The redirect path is intentionally kept small because redirect latency is a
 
-
-
-\### Spring Data JPA
-
-
-
-Spring Data JPA provides a clean abstraction for persistence and
-
-reduces repetitive database-access code.
-
-
-
-\### PostgreSQL
-
-
-
-PostgreSQL provides durable relational persistence and supports
-
-constraints and indexing required by the service.
-
-
-
-\### Redis
-
-
-
-Redis is used for frequently accessed URL mappings to reduce database
-
-reads on the redirect path.
-
-
-
-\### Maven Wrapper
-
-
-
-The Maven Wrapper allows the project to be built consistently without
-
-requiring Maven to be installed globally.
-
-
-
-\### Docker Compose
-
-
-
-Docker Compose will be used to provide reproducible local PostgreSQL
-
-and Redis infrastructure.
-
-
-
-\### JUnit and Mockito
-
-
-
-JUnit, Mockito, and Spring Boot testing support will be used for unit
-
-and integration testing.
+primary performance concern.
 
 
 
@@ -512,91 +288,45 @@ and integration testing.
 
 
 
-\## 7. Reliability Strategy
+\## 7. Asynchronous Analytics
 
 
 
-The application explicitly handles expected failure scenarios.
+Analytics is intentionally separated from the main redirect response path.
 
 
 
-\### Invalid URL
+For this prototype, analytics work can be executed using a bounded Spring
+
+asynchronous executor.
 
 
 
-Only supported HTTP and HTTPS destination URLs are accepted.
+Redirect
+
+&#x20;  |
+
+&#x20;  +----> Return HTTP redirect
+
+&#x20;  |
+
+&#x20;  +----> Async analytics task
 
 
 
-Result:
+This reduces unnecessary work on the request thread.
 
 
 
-HTTP 400 Bad Request
+For high-volume production traffic, an in-process executor has limitations.
+
+A durable event broker such as Kafka could replace this mechanism without
+
+changing the external API contract.
 
 
 
-\### Unknown Short Code
-
-
-
-If a short code does not exist:
-
-
-
-HTTP 404 Not Found
-
-
-
-\### Expired URL
-
-
-
-If the URL exists but has expired:
-
-
-
-HTTP 410 Gone
-
-
-
-\### Short-Code Collision
-
-
-
-Generated short codes must be unique.
-
-
-
-The database enforces uniqueness, and the application will retry
-
-generation when a collision is detected.
-
-
-
-\### Unexpected Failure
-
-
-
-Unexpected application failures return a controlled error response
-
-without exposing internal implementation details.
-
-
-
-\### Cache Failure
-
-
-
-PostgreSQL remains the source of truth.
-
-
-
-The architecture should allow redirect lookup to continue using the
-
-database when cached data is unavailable rather than treating Redis
-
-as permanent storage.
+Kafka is therefore an evolution path rather than a prototype dependency.
 
 
 
@@ -608,27 +338,23 @@ as permanent storage.
 
 
 
-Public URL creation endpoints can be abused through excessive
-
-requests.
+Selected public endpoints are protected by rate limiting.
 
 
 
-Basic rate limiting will therefore be added as a reliability and
-
-abuse-protection mechanism.
+The prototype may maintain rate-limit state within the application process.
 
 
 
-The implementation will remain intentionally simple for the
+This is appropriate for demonstrating the control but does not provide a
 
-prototype.
+globally consistent limit across multiple application instances.
 
 
 
-In a horizontally scaled production deployment, rate-limit state
+At larger scale, rate-limit state should move to shared infrastructure such as
 
-would need to be coordinated across application instances.
+Redis or an API gateway.
 
 
 
@@ -636,93 +362,59 @@ would need to be coordinated across application instances.
 
 
 
-\## 9. Security Considerations
+\## 9. Horizontal Scaling
 
 
 
-The prototype will:
+The HTTP application is designed to remain stateless.
 
 
 
-\- Accept only HTTP and HTTPS destination URLs
-
-\- Validate incoming request data
-
-\- Avoid exposing stack traces or internal exception details
-
-\- Avoid hard-coded credentials
-
-\- Keep secrets outside source control
-
-\- Apply basic rate limiting
-
-\- Validate short-code input
+A production topology could use:
 
 
 
-Authentication and authorization are outside the current prototype
+Load Balancer
 
-scope.
+&#x20;    |
 
+&#x20;+---+---+
 
+&#x20;|   |   |
 
-Additional protections such as malicious URL reputation checking
+App App App
 
-would require external security services and are outside the current
+&#x20;|   |   |
 
-scope.
+&#x20;+---+---+
 
+&#x20;    |
 
-
-\---
-
-
-
-\## 10. Scalability Strategy
+Shared PostgreSQL
 
 
 
-The prototype implements selected scalability and reliability
+Application-local mechanisms would need to evolve when multiple instances are
 
-features where they directly support the URL-shortening use case:
-
-
-
-\- PostgreSQL for durable URL storage
-
-\- Database indexing for short-code lookup
-
-\- Redis caching for frequently accessed URL mappings
-
-\- Rate limiting for public endpoints
-
-\- Docker Compose for reproducible local infrastructure
+introduced.
 
 
 
-Potential future production improvements include:
+Examples:
 
 
 
-\- Asynchronous event-driven analytics
+\- Local rate limiting -> distributed rate limiting
 
-\- Database replication
+\- In-process analytics -> durable event broker
 
-\- Horizontal application scaling
-
-\- Distributed rate limiting
-
-\- Observability and centralized metrics
-
-\- Multi-region deployment
+\- Optional local caching -> distributed cache
 
 
 
-These are documented rather than implemented because they require
+This prototype documents these boundaries rather than pretending to provide a
 
-deployment-scale requirements and infrastructure beyond the scope
-
-of this prototype.
+multi-node production deployment.
 
 
 
@@ -730,75 +422,33 @@ of this prototype.
 
 
 
-\## 11. Why a Modular Monolith?
+\## 10. Reliability
 
 
 
-The application is intentionally implemented as one deployable
-
-Spring Boot service rather than multiple microservices.
+Reliability controls include:
 
 
 
-The current functional scope does not justify the deployment,
+\- Database uniqueness constraint for short codes
 
-networking, monitoring, and consistency complexity introduced by
+\- Collision handling
 
-multiple services.
+\- URL validation
 
+\- Expiration checks
 
+\- Controlled exception mapping
 
-Responsibilities are still separated through controller, service,
+\- HTTP 404 for unknown short codes
 
-repository, caching, and validation boundaries.
+\- HTTP 410 for expired short codes
 
+\- HTTP 429 for rate-limit violations
 
+\- Automated tests
 
-This keeps the code maintainable and leaves room for future
-
-decomposition if scale or organizational requirements justify it.
-
-
-
-\---
-
-
-
-\## 12. Analytics Design
-
-
-
-The initial analytics requirement is interpreted as:
-
-
-
-"Track the total number of successful redirects for each shortened
-
-URL."
-
-
-
-The redirect path should remain lightweight.
-
-
-
-For the prototype, click-count analytics can be maintained within the
-
-application.
-
-
-
-At substantially higher traffic volumes, redirect events could be
-
-published asynchronously and processed separately to avoid adding
-
-analytics-processing latency to redirects.
-
-
-
-A message broker is intentionally not introduced until such scale
-
-requirements exist.
+\- Build verification
 
 
 
@@ -806,67 +456,43 @@ requirements exist.
 
 
 
-\## 13. Engineering Trade-offs
+\## 11. Security Considerations
 
 
 
-\### PostgreSQL vs H2
+The service accepts only HTTP and HTTPS URLs.
 
 
 
-PostgreSQL increases setup complexity but provides realistic durable
-
-persistence.
+The redirect service does not fetch the destination URL itself.
 
 
 
-H2 remains useful for lightweight automated testing.
+Secrets must not be committed to source control.
 
 
 
-\### Redis
+Database credentials for the PostgreSQL profile are supplied through
+
+environment variables.
 
 
 
-Redis adds another infrastructure dependency but demonstrates a
-
-realistic optimization for the read-heavy redirect path.
+Additional production controls could include:
 
 
 
-The database remains the source of truth to avoid coupling correctness
+\- Authentication for administrative operations
 
-to cache availability.
+\- Abuse/phishing detection
 
+\- Domain restrictions
 
+\- Centralized distributed rate limiting
 
-\### Kafka / Message Broker
+\- TLS termination
 
-
-
-Not implemented.
-
-
-
-A message broker would be useful for large-scale asynchronous
-
-analytics, but introducing one solely for incrementing a click counter
-
-would add unnecessary operational complexity to this prototype.
-
-
-
-\### Microservices
-
-
-
-Not implemented.
-
-
-
-A modular monolith provides sufficient separation for the current
-
-scope with substantially lower operational complexity.
+\- Audit logging
 
 
 
@@ -874,93 +500,105 @@ scope with substantially lower operational complexity.
 
 
 
-\## 14. AI-Assisted Engineering Approach
+\## 12. Key Engineering Decisions
 
 
 
-AI assistance may be used for:
+\### Modular Monolith Instead of Microservices
 
 
 
-\- Requirement analysis
+The current domain is small and does not justify operationally independent
 
-\- Implementation suggestions
-
-\- Test generation
-
-\- Debugging
-
-\- Refactoring
-
-\- Security review
-
-\- Documentation
-
-\- Review preparation
+services.
 
 
 
-AI-generated output is not automatically accepted.
+A modular monolith provides simpler development, testing, and deployment while
+
+preserving clear boundaries.
 
 
 
-For significant changes, the workflow is:
+\### H2 as Default
 
 
 
-Requirement
-
-&#x20; |
-
-&#x20; v
-
-Task definition and acceptance criteria
-
-&#x20; |
-
-&#x20; v
-
-AI-assisted implementation/suggestion
-
-&#x20; |
-
-&#x20; v
-
-Engineer review
-
-&#x20; |
-
-&#x20; +---- Accept
-
-&#x20; |
-
-&#x20; +---- Edit
-
-&#x20; |
-
-&#x20; +---- Reject
-
-&#x20; |
-
-&#x20; v
-
-Automated/manual validation
-
-&#x20; |
-
-&#x20; v
-
-Engineer approval
+H2 minimizes evaluator setup and makes the prototype immediately runnable.
 
 
 
-Important AI-assisted decisions will be recorded with the reasoning
-
-behind accepted, modified, or rejected suggestions.
+\### PostgreSQL as Production-Oriented Profile
 
 
 
-The engineer remains responsible for correctness, security,
+PostgreSQL demonstrates durable shared persistence without forcing external
 
-maintainability, and production readiness.
+infrastructure on every evaluator.
+
+
+
+\### No Mandatory Redis
+
+
+
+Caching is not required for correctness at prototype scale.
+
+
+
+Redis becomes valuable when measured traffic or distributed coordination
+
+justifies it.
+
+
+
+\### No Kafka in the Prototype
+
+
+
+A durable event broker would improve analytics durability at significant
+
+traffic volumes, but introducing Kafka solely for a prototype redirect counter
+
+would add unnecessary operational complexity.
+
+
+
+The asynchronous boundary is retained so the implementation can evolve toward
+
+event-driven analytics later.
+
+
+
+\---
+
+
+
+\## 13. Trade-offs
+
+
+
+The prototype prioritizes:
+
+
+
+\- Correctness
+
+\- Reproducibility
+
+\- Clear code
+
+\- Automated validation
+
+\- Low setup friction
+
+\- Defensible architecture
+
+
+
+over demonstrating infrastructure purely for technology breadth.
+
+
+
+Known limitations are documented rather than hidden.
 
