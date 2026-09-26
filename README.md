@@ -1093,7 +1093,92 @@ Before submission, the project is validated using:
 mvnw.cmd clean verify
 
 ```
+## Quick API Test
 
+After starting the application, it runs at:
+
+```text
+http://localhost:8080
+```
+
+The following commands can be used to verify the main functionality.
+
+### 1. Create a Short URL
+
+```bash
+curl -i -X POST http://localhost:8080/api/urls \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://www.google.com"}'
+```
+
+Example response:
+
+```json
+{
+  "shortCode": "Ab3xYz1",
+  "shortUrl": "http://localhost:8080/Ab3xYz1",
+  "originalUrl": "https://www.google.com"
+}
+```
+
+Copy the returned `shortCode` and use it in the commands below.
+
+### 2. Test Redirect
+
+```bash
+curl -i http://localhost:8080/Ab3xYz1
+```
+
+Expected:
+
+```text
+HTTP/1.1 302
+Location: https://www.google.com
+```
+
+### 3. View Analytics
+
+```bash
+curl http://localhost:8080/api/urls/Ab3xYz1/stats
+```
+
+Example:
+
+```json
+{
+  "shortCode": "Ab3xYz1",
+  "originalUrl": "https://www.google.com",
+  "redirectCount": 1
+}
+```
+
+Analytics updates asynchronously, so the count may take a moment to appear.
+
+### 4. Test Invalid URL
+
+```bash
+curl -i -X POST http://localhost:8080/api/urls \
+  -H "Content-Type: application/json" \
+  -d '{"url":"hello"}'
+```
+
+Expected:
+
+```text
+HTTP/1.1 400
+```
+
+### 5. Test Unknown Short Code
+
+```bash
+curl -i http://localhost:8080/DOESNOTEXIST
+```
+
+Expected:
+
+```text
+HTTP/1.1 404
+```
 
 
 The final implementation remains engineer-owned: AI assists the engineering process, while correctness, validation, maintainability, and production-readiness decisions remain human responsibilities.
